@@ -293,7 +293,7 @@ function FormInput({
           onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           maxLength={maxLength}
-          className={`w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/80 focus:border-rose-300 outline-none transition-colors placeholder:text-slate-400 ${className}`}
+          className={`w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/80 focus:border-rose-300 outline-none transition-colors text-slate-800 placeholder:text-slate-400 ${className}`}
           disabled={disabled}
         />
       </motion.div>

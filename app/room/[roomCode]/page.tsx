@@ -274,22 +274,6 @@ function LobbyView({
 
   const shareLink = async () => {
     const url = `${window.location.origin}/join/${roomCode}`;
-
-    // Try native share API first (mobile-friendly)
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join my Taboo game!',
-          url,
-        });
-        return;
-      } catch (err) {
-        // User cancelled or share failed, fall back to clipboard
-        if ((err as Error).name === 'AbortError') return;
-      }
-    }
-
-    // Fallback to clipboard
     try {
       await navigator.clipboard.writeText(url);
       setLinkCopied(true);
@@ -619,7 +603,7 @@ function TeamPanel({
             >
               <div className="flex items-center gap-2">
                 <PlayerAvatar playerId={player.id} size="md" style={avatarStyle} />
-                <span>
+                <span className="text-slate-700">
                   {player.name}
                   {player.isHost && ' (Host)'}
                 </span>
