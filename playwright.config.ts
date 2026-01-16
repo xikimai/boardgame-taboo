@@ -26,7 +26,8 @@ export default defineConfig({
     },
     {
       command: 'yarn dev:party',
-      url: 'http://localhost:1999',
+      // PartyKit is a WebSocket server - no HTTP endpoint to poll
+      // Detect readiness from stdout "Ready on" message instead
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
       stdout: 'pipe',
