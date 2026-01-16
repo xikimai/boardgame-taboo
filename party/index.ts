@@ -53,6 +53,9 @@ export default class TabooServer implements Party.Server {
     pendingIntents: AlarmIntent[];
   } = { nextAlarmAt: null, pendingIntents: [] };
 
+  // Track who buzzed for undo functionality
+  currentBuzzerId: string | null = null;
+
   constructor(readonly party: Party.Party) {
     // Initialize empty room
     this.room = {
@@ -101,6 +104,9 @@ export default class TabooServer implements Party.Server {
         case 'LEAVE_TEAM':
           this.handleLeaveTeam(sender);
           break;
+        case 'UPDATE_SETTINGS':
+          this.handleUpdateSettings(msg.payload, sender);
+          break;
         case 'START_GAME':
           this.handleStartGame(sender);
           break;
@@ -116,11 +122,17 @@ export default class TabooServer implements Party.Server {
         case 'BUZZ':
           this.handleBuzz(sender);
           break;
+        case 'UNDO_BUZZ':
+          this.handleUndoBuzz(sender);
+          break;
         case 'DISMISS_BUZZ':
           this.handleDismissBuzz(sender);
           break;
         case 'RESTART_GAME':
           this.handleRestartGame(sender);
+          break;
+        case 'END_GAME':
+          this.handleEndGame(sender);
           break;
         case 'PING':
           sender.send(JSON.stringify({
@@ -323,6 +335,50 @@ export default class TabooServer implements Party.Server {
     });
   }
 
+  private handleUpdateSettings(
+    payload: { maxRounds?: number; turnDuration?: number },
+    conn: Party.Connection
+  ) {
+    const playerId = this.getPlayerId(conn);
+    if (!playerId) return;
+
+    // Only host can update settings
+    if (playerId !== this.room.hostId) {
+      this.sendError(conn, 'Only the host can change settings');
+      return;
+    }
+
+    // Can only update settings in lobby
+    if (this.room.status !== 'lobby') {
+      this.sendError(conn, 'Cannot change settings during game');
+      return;
+    }
+
+    // Update settings with validation
+    if (payload.maxRounds !== undefined) {
+      // Allow 4, 6, 8, or 10 rounds
+      if ([4, 6, 8, 10].includes(payload.maxRounds)) {
+        this.room.settings.maxRounds = payload.maxRounds;
+      }
+    }
+
+    if (payload.turnDuration !== undefined) {
+      // Allow 30, 45, 60, or 90 seconds
+      if ([30, 45, 60, 90].includes(payload.turnDuration)) {
+        this.room.settings.turnDuration = payload.turnDuration;
+      }
+    }
+
+    // Broadcast settings update
+    this.broadcast({
+      type: 'SETTINGS_UPDATED',
+      payload: {
+        maxRounds: this.room.settings.maxRounds,
+        turnDuration: this.room.settings.turnDuration,
+      },
+    });
+  }
+
   private handleStartGame(conn: Party.Connection) {
     const playerId = this.getPlayerId(conn);
     if (!playerId) return;
@@ -474,6 +530,9 @@ export default class TabooServer implements Party.Server {
     this.game.currentTurn.remainingTimeWhenPaused = remainingTime;
     this.game.currentTurn.status = 'buzzing';
 
+    // Track who buzzed for undo functionality
+    this.currentBuzzerId = playerId;
+
     // Cancel turn_end alarm (timer is paused)
     this.cancelAlarmIntent('turn_end');
 
@@ -495,6 +554,58 @@ export default class TabooServer implements Party.Server {
     });
   }
 
+  // Handle undo buzz - only the buzzer can undo, no penalty applied
+  private async handleUndoBuzz(conn: Party.Connection) {
+    const playerId = this.getPlayerId(conn);
+    if (!playerId || !this.game) return;
+
+    // Only the person who buzzed can undo
+    if (playerId !== this.currentBuzzerId) {
+      return;
+    }
+
+    if (this.game.currentTurn.status !== 'buzzing') {
+      return;
+    }
+
+    const now = Date.now();
+    const remainingTime = this.game.currentTurn.remainingTimeWhenPaused;
+
+    // Resume timer with remaining time (no penalty)
+    this.game.currentTurn.timerStartedAt = now;
+    this.game.currentTurn.timerDuration = remainingTime;
+    this.game.currentTurn.timerPausedAt = 0;
+    this.game.currentTurn.remainingTimeWhenPaused = 0;
+    this.game.currentTurn.status = 'active';
+
+    // Clear buzzer ID
+    this.currentBuzzerId = null;
+
+    // Cancel buzz_timeout alarm
+    this.cancelAlarmIntent('buzz_timeout');
+
+    // Schedule new turn_end alarm for remaining time
+    if (remainingTime > 0) {
+      await this.scheduleAlarm({
+        type: 'turn_end',
+        scheduledFor: now + remainingTime,
+      });
+    } else {
+      // No time remaining, end turn immediately
+      this.endTurn();
+      return;
+    }
+
+    // Broadcast undo (no card change, no penalty)
+    this.broadcast({
+      type: 'BUZZ_UNDONE',
+      payload: {
+        timerStartedAt: now,
+        timerDuration: remainingTime,
+      },
+    });
+  }
+
   private async handleDismissBuzz(conn: Party.Connection) {
     const playerId = this.getPlayerId(conn);
     if (!playerId || !this.game) return;
@@ -507,6 +618,9 @@ export default class TabooServer implements Party.Server {
     if (this.game.currentTurn.status !== 'buzzing') {
       return;
     }
+
+    // Clear buzzer ID
+    this.currentBuzzerId = null;
 
     // Deduct point and move to next card
     this.game.currentTurn.turnScore = Math.max(0, this.game.currentTurn.turnScore);
@@ -566,6 +680,9 @@ export default class TabooServer implements Party.Server {
     if (!this.game || this.game.currentTurn.status !== 'buzzing') {
       return;
     }
+
+    // Clear buzzer ID
+    this.currentBuzzerId = null;
 
     // Apply -1 penalty
     this.game.scores[this.game.currentTurn.activeTeam] = Math.max(
@@ -644,6 +761,25 @@ export default class TabooServer implements Party.Server {
       type: 'RETURNED_TO_LOBBY',
       payload: { room: this.room },
     });
+  }
+
+  private handleEndGame(conn: Party.Connection) {
+    const playerId = this.getPlayerId(conn);
+    if (!playerId) return;
+
+    // Only host can end game
+    if (playerId !== this.room.hostId) {
+      this.sendError(conn, 'Only the host can end the game');
+      return;
+    }
+
+    // Only during active game
+    if (this.room.status !== 'playing' || !this.game) {
+      return;
+    }
+
+    // End the game with current scores
+    this.endGame('host_ended');
   }
 
   // ============ Game Logic Helpers ============
@@ -808,8 +944,15 @@ export default class TabooServer implements Party.Server {
     this.sendCardToPlayers();
   }
 
-  private endGame() {
+  private endGame(reason: 'completed' | 'host_ended' = 'completed') {
     if (!this.game) return;
+
+    // Clear turn timer
+    this.cancelAlarmIntent('turn_end');
+    if (this.turnTimer) {
+      clearTimeout(this.turnTimer);
+      this.turnTimer = null;
+    }
 
     this.room.status = 'finished';
 
@@ -827,6 +970,8 @@ export default class TabooServer implements Party.Server {
       payload: {
         winner,
         finalScores: this.game.scores,
+        reason,
+        turnHistory: this.game.turnHistory,
       },
     });
   }

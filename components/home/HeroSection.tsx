@@ -49,11 +49,20 @@ export function HeroSection() {
 
   const title = 'TABOO';
 
+  // Pastel colors for each letter - matches the app's warm color palette
+  const letterColors = [
+    'from-rose-400 to-pink-400',
+    'from-violet-400 to-purple-400',
+    'from-sky-400 to-cyan-400',
+    'from-amber-400 to-orange-400',
+    'from-emerald-400 to-teal-400',
+  ];
+
   return (
     <div ref={containerRef} className="text-center mb-8">
       {/* Animated Logo Text */}
       <h1
-        className="text-6xl md:text-7xl font-bold mb-3 perspective-1000"
+        className="text-6xl md:text-7xl font-bold mb-3"
         style={{ perspective: '1000px' }}
       >
         {title.split('').map((letter, index) => (
@@ -62,22 +71,7 @@ export function HeroSection() {
             ref={(el) => {
               if (el) lettersRef.current[index] = el;
             }}
-            className="inline-block hero-letter"
-            style={{
-              background: `linear-gradient(
-                135deg,
-                #3B82F6 0%,
-                #8B5CF6 25%,
-                #EC4899 50%,
-                #EF4444 75%,
-                #3B82F6 100%
-              )`,
-              backgroundSize: '200% 200%',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-              animation: 'shimmer 3s ease-in-out infinite',
-            }}
+            className={`inline-block bg-gradient-to-b ${letterColors[index]} bg-clip-text text-transparent drop-shadow-sm`}
           >
             {letter}
           </span>
@@ -89,7 +83,7 @@ export function HeroSection() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8, duration: 0.5 }}
-        className="text-lg text-slate-600 dark:text-slate-400"
+        className="text-lg text-slate-600"
       >
         The word-guessing party game
       </motion.p>
@@ -99,7 +93,7 @@ export function HeroSection() {
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ delay: 1, duration: 0.5, ease: 'easeOut' }}
-        className="h-1 w-24 mx-auto mt-4 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-red-500"
+        className="h-1 w-24 mx-auto mt-4 rounded-full bg-gradient-to-r from-rose-400 via-violet-400 to-sky-400"
       />
     </div>
   );

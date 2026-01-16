@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
 import { useRoom } from '@/lib/hooks/useRoom';
 import { useTimer, formatTime } from '@/lib/hooks/useTimer';
 import { useDebounceAction } from '@/lib/hooks/useDebounce';
@@ -48,13 +49,16 @@ export default function RoomPage() {
     gameOver,
     joinRoom,
     selectTeam,
+    updateSettings,
     startGame,
     startTurn,
     cardCorrect,
     cardSkip,
     buzz,
+    undoBuzz,
     dismissBuzz,
     restartGame,
+    endGame,
     clearTurnResult,
   } = useRoom(roomCode);
 
@@ -89,10 +93,10 @@ export default function RoomPage() {
   // Early return while roomCode is loading/invalid (during SSR/hydration)
   if (!roomCode || !isValidRoomCode(roomCode)) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900">
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50">
         <div className="text-center">
-          <div className="rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4 animate-spin" />
-          <p className="text-slate-600 dark:text-slate-400">Loading room...</p>
+          <div className="rounded-full h-12 w-12 border-b-2 border-violet-500 mx-auto mb-4 animate-spin" />
+          <p className="text-slate-600">Loading room...</p>
         </div>
       </main>
     );
@@ -101,7 +105,7 @@ export default function RoomPage() {
   // Loading state with animation
   if (connectionStatus === 'connecting' || !room) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900">
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -110,9 +114,9 @@ export default function RoomPage() {
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-            className="rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"
+            className="rounded-full h-12 w-12 border-b-2 border-violet-500 mx-auto mb-4"
           />
-          <p className="text-slate-600 dark:text-slate-400">Connecting to room...</p>
+          <p className="text-slate-600">Connecting to room...</p>
         </motion.div>
       </main>
     );
@@ -121,7 +125,7 @@ export default function RoomPage() {
   // Error state
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900">
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50">
         <motion.div
           variants={fadeInUp}
           initial="hidden"
@@ -131,7 +135,7 @@ export default function RoomPage() {
           <motion.p
             animate={{ x: [0, -5, 5, -5, 5, 0] }}
             transition={{ duration: 0.4 }}
-            className="text-red-500 mb-4"
+            className="text-rose-500 mb-4"
           >
             {error}
           </motion.p>
@@ -167,6 +171,7 @@ export default function RoomPage() {
         roomCode={roomCode}
         avatarStyle={avatarStyle}
         onSelectTeam={selectTeam}
+        onUpdateSettings={updateSettings}
         onStartGame={startGame}
         sounds={sounds}
       />
@@ -197,11 +202,14 @@ export default function RoomPage() {
         buzzAlert={buzzAlert}
         turnResult={turnResult}
         avatarStyle={avatarStyle}
+        isHost={isHost}
         onStartTurn={startTurn}
         onCardCorrect={cardCorrect}
         onCardSkip={cardSkip}
         onBuzz={buzz}
+        onUndoBuzz={undoBuzz}
         onDismissBuzz={dismissBuzz}
+        onEndGame={endGame}
         sounds={sounds}
       />
     );
@@ -219,6 +227,7 @@ interface LobbyViewProps {
   roomCode: string;
   avatarStyle: DiceBearStyle;
   onSelectTeam: (team: Team) => void;
+  onUpdateSettings: (settings: { maxRounds?: number; turnDuration?: number }) => void;
   onStartGame: () => void;
   sounds: UseSoundsReturn;
 }
@@ -230,6 +239,7 @@ function LobbyView({
   roomCode,
   avatarStyle,
   onSelectTeam,
+  onUpdateSettings,
   onStartGame,
   sounds,
 }: LobbyViewProps) {
@@ -270,7 +280,6 @@ function LobbyView({
       try {
         await navigator.share({
           title: 'Join my Taboo game!',
-          text: `Join my Taboo game with code ${roomCode}`,
           url,
         });
         return;
@@ -292,7 +301,7 @@ function LobbyView({
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
+    <main className="min-h-screen bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50 p-4">
       <div className="max-w-2xl mx-auto">
         {/* Room Code Header */}
         <motion.div
@@ -301,7 +310,7 @@ function LobbyView({
           animate="visible"
           className="text-center mb-8"
         >
-          <h1 className="text-3xl font-bold mb-2 text-slate-800 dark:text-slate-200">
+          <h1 className="text-3xl font-bold mb-2 text-slate-800">
             Game Lobby
           </h1>
           <div className="flex items-center justify-center gap-2">
@@ -320,7 +329,7 @@ function LobbyView({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-green-500 font-normal"
+                    className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-green-600 font-medium z-10"
                   >
                     Copied!
                   </motion.span>
@@ -368,6 +377,82 @@ function LobbyView({
           </p>
         </motion.div>
 
+        {/* Game Settings (Host Only) */}
+        {isHost && (
+          <motion.div
+            variants={fadeInUp}
+            initial="hidden"
+            animate="visible"
+            transition={{ delay: 0.2 }}
+            className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-8 shadow-lg shadow-rose-100/50"
+          >
+            <h3 className="text-lg font-bold mb-4 text-slate-800">
+              Game Settings
+            </h3>
+
+            <div className="space-y-4">
+              {/* Rounds selector */}
+              <div>
+                <label className="block text-sm text-slate-600 mb-2">
+                  Number of Rounds
+                </label>
+                <div className="flex gap-2">
+                  {[4, 6, 8, 10].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => onUpdateSettings({ maxRounds: n })}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        room.settings.maxRounds === n
+                          ? 'bg-violet-500 text-white shadow-md shadow-violet-200'
+                          : 'bg-white/60 text-slate-600 hover:bg-white hover:shadow-sm'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Turn duration selector */}
+              <div>
+                <label className="block text-sm text-slate-600 mb-2">
+                  Turn Duration (seconds)
+                </label>
+                <div className="flex gap-2">
+                  {[30, 45, 60, 90].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => onUpdateSettings({ turnDuration: s })}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        room.settings.turnDuration === s
+                          ? 'bg-violet-500 text-white shadow-md shadow-violet-200'
+                          : 'bg-white/60 text-slate-600 hover:bg-white hover:shadow-sm'
+                      }`}
+                    >
+                      {s}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Show current settings for non-hosts */}
+        {!isHost && (
+          <motion.div
+            variants={fadeInUp}
+            initial="hidden"
+            animate="visible"
+            transition={{ delay: 0.2 }}
+            className="bg-white/60 backdrop-blur-sm rounded-xl p-3 mb-6 text-center shadow-sm"
+          >
+            <p className="text-sm text-slate-600">
+              {room.settings.maxRounds} rounds • {room.settings.turnDuration}s per turn
+            </p>
+          </motion.div>
+        )}
+
         {/* Team Selection */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <motion.div
@@ -413,7 +498,7 @@ function LobbyView({
           initial="hidden"
           animate="visible"
           transition={{ delay: 0.3 }}
-          className="bg-white dark:bg-slate-800 rounded-xl p-4 mb-8"
+          className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-8 shadow-lg shadow-sky-100/50"
         >
           <h3 className="text-sm font-medium text-slate-500 mb-2">
             Waiting to join a team:
@@ -432,8 +517,8 @@ function LobbyView({
                     exit="exit"
                     className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm ${
                       player.id === currentPlayerId
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        ? 'bg-violet-100 text-violet-700 font-medium'
+                        : 'bg-slate-100 text-slate-600'
                     }`}
                   >
                     <PlayerAvatar playerId={player.id} size="sm" style={avatarStyle} />
@@ -528,7 +613,7 @@ function TeamPanel({
               initial="hidden"
               animate="visible"
               exit="exit"
-              className={`px-3 py-2 rounded-lg bg-white dark:bg-slate-800 text-sm flex items-center justify-between ${
+              className={`px-3 py-2 rounded-lg bg-white/90 backdrop-blur-sm text-sm flex items-center justify-between shadow-sm ${
                 !player.isConnected ? 'opacity-50' : ''
               }`}
             >
@@ -587,11 +672,14 @@ interface GameViewProps {
   buzzAlert: ReturnType<typeof useRoom>['buzzAlert'];
   turnResult: ReturnType<typeof useRoom>['turnResult'];
   avatarStyle: DiceBearStyle;
+  isHost: boolean;
   onStartTurn: () => void;
   onCardCorrect: () => void;
   onCardSkip: () => void;
   onBuzz: () => void;
+  onUndoBuzz: () => void;
   onDismissBuzz: () => void;
+  onEndGame: () => void;
   sounds: UseSoundsReturn;
 }
 
@@ -603,11 +691,14 @@ function GameView({
   buzzAlert,
   turnResult,
   avatarStyle,
+  isHost,
   onStartTurn,
   onCardCorrect,
   onCardSkip,
   onBuzz,
+  onUndoBuzz,
   onDismissBuzz,
+  onEndGame,
   sounds,
 }: GameViewProps) {
   const { timeLeft, timerClass } = useTimer(
@@ -631,12 +722,41 @@ function GameView({
       ? TEAM_COLORS.A.primary
       : TEAM_COLORS.B.primary;
 
-  // Timer urgency animation
-  const isUrgent = timeLeft <= 10;
+  // Get player's team color
+  const playerTeamColor = currentPlayer?.team === 'A' ? TEAM_COLORS.A : TEAM_COLORS.B;
+
+  // Timer urgency animation - progressive intensity
+  const isModerate = timeLeft <= 20 && timeLeft > 10;
+  const isUrgent = timeLeft <= 10 && timeLeft > 5;
   const isCritical = timeLeft <= 5;
 
-  // Track previous timeLeft for tick sound
+  // Track previous timeLeft for tick sound and shake trigger
   const prevTimeLeft = useRef(timeLeft);
+  const timerRef = useRef<HTMLDivElement>(null);
+
+  // GSAP shake effect when entering critical threshold
+  useEffect(() => {
+    if (
+      game.currentTurn.status === 'active' &&
+      timeLeft === 5 &&
+      prevTimeLeft.current === 6 &&
+      timerRef.current
+    ) {
+      // Shake the timer with elastic feel
+      gsap.to(timerRef.current, {
+        x: () => gsap.utils.random(-4, 4),
+        duration: 0.05,
+        repeat: 8,
+        yoyo: true,
+        ease: 'none',
+        onComplete: () => {
+          if (timerRef.current) {
+            gsap.set(timerRef.current, { x: 0 });
+          }
+        },
+      });
+    }
+  }, [timeLeft, game.currentTurn.status]);
 
   // Play tick sound when timer <= 5 seconds and decrementing
   useEffect(() => {
@@ -673,15 +793,72 @@ function GameView({
     onCardSkip();
   };
 
+  // Animated background colors based on active team - pastel versions
+  const bgGradient1 = game.currentTurn.activeTeam === 'A'
+    ? 'linear-gradient(135deg, #dbeafe 0%, #f0f9ff 50%, #e0f2fe 100%)'  // Pastel blue
+    : 'linear-gradient(135deg, #ffe4e6 0%, #fff1f2 50%, #fecdd3 100%)'; // Pastel rose
+  const bgGradient2 = game.currentTurn.activeTeam === 'A'
+    ? 'linear-gradient(135deg, #e0f2fe 0%, #dbeafe 50%, #bfdbfe 100%)'  // Pastel blue shift
+    : 'linear-gradient(135deg, #fecdd3 0%, #ffe4e6 50%, #fda4af 100%)'; // Pastel rose shift
+
   return (
-    <main className="min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
-      <div className="max-w-lg mx-auto">
+    <motion.main
+      className="min-h-screen p-4 relative overflow-hidden"
+      animate={{
+        background: [bgGradient1, bgGradient2],
+      }}
+      transition={{ duration: 8, repeat: Infinity, repeatType: 'reverse' }}
+    >
+      {/* Floating shapes for visual interest - softer on pastel background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          className="absolute w-64 h-64 rounded-full opacity-20"
+          style={{ backgroundColor: activeTeamColor, top: '10%', left: '-5%' }}
+          animate={{
+            x: [0, 100, 0],
+            y: [0, 50, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{ duration: 20, repeat: Infinity }}
+        />
+        <motion.div
+          className="absolute w-48 h-48 rounded-full opacity-20"
+          style={{ backgroundColor: activeTeamColor, bottom: '15%', right: '-5%' }}
+          animate={{
+            x: [0, -80, 0],
+            y: [0, -40, 0],
+            scale: [1, 1.1, 1],
+          }}
+          transition={{ duration: 15, repeat: Infinity }}
+        />
+      </div>
+
+      <div className="relative z-10 max-w-lg mx-auto">
+        {/* Player Identity Badge */}
+        {currentPlayer && currentPlayer.team && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 text-center"
+          >
+            <span
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-white shadow-lg"
+              style={{ backgroundColor: playerTeamColor.primary }}
+            >
+              <PlayerAvatar playerId={currentPlayerId!} size="sm" style={avatarStyle} />
+              You&apos;re on {playerTeamColor.name}
+              {isClueGiver && ' • Clue Giver'}
+              {isGuesser && ' • Guessing'}
+              {isOpponent && ' • Watching'}
+            </span>
+          </motion.div>
+        )}
         {/* Score Board */}
         <motion.div
           variants={fadeInUp}
           initial="hidden"
           animate="visible"
-          className="flex justify-between items-center mb-4 bg-white dark:bg-slate-800 rounded-xl p-4"
+          className="flex justify-between items-center mb-4 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg"
         >
           <div className="text-center">
             <p className="text-xs text-slate-500 uppercase">{TEAM_COLORS.A.name}</p>
@@ -692,23 +869,38 @@ function GameView({
             <p className="text-sm text-slate-500">
               Round {game.currentRound} / {game.totalRounds}
             </p>
-            <motion.p
+            <motion.div
+              ref={timerRef}
               animate={
                 isCritical
                   ? { scale: [1, 1.1, 1] }
                   : isUrgent
                     ? { scale: [1, 1.05, 1] }
-                    : {}
+                    : isModerate
+                      ? { scale: [1, 1.02, 1] }
+                      : {}
               }
               transition={
-                isCritical || isUrgent
-                  ? { duration: 0.5, repeat: Infinity }
-                  : {}
+                isCritical
+                  ? { duration: 0.3, repeat: Infinity }
+                  : isUrgent
+                    ? { duration: 0.5, repeat: Infinity }
+                    : isModerate
+                      ? { duration: 0.8, repeat: Infinity }
+                      : {}
               }
-              className={`text-4xl font-mono font-bold ${timerClass}`}
+              className={`text-4xl font-mono font-bold tabular-nums ${
+                isCritical
+                  ? 'text-rose-600'
+                  : isUrgent
+                    ? 'text-rose-500'
+                    : isModerate
+                      ? 'text-amber-500'
+                      : 'text-slate-700'
+              }`}
             >
               {formatTime(timeLeft)}
-            </motion.p>
+            </motion.div>
           </div>
 
           <div className="text-center">
@@ -724,6 +916,9 @@ function GameView({
           className="text-center mb-4 py-3 rounded-lg text-white"
           style={{ backgroundColor: activeTeamColor }}
         >
+          <p className="text-xs uppercase tracking-wide opacity-75 mb-1">
+            {game.currentTurn.activeTeam === 'A' ? TEAM_COLORS.A.name : TEAM_COLORS.B.name}&apos;s Turn
+          </p>
           <div className="flex items-center justify-center gap-2 mb-1">
             {clueGiver && (
               <PlayerAvatar playerId={clueGiver.id} size="md" style={avatarStyle} className="border-2 border-white/30" />
@@ -739,9 +934,28 @@ function GameView({
         <BuzzOverlay
           isVisible={!!buzzAlert}
           buzzerName={buzzAlert?.buzzerName}
+          buzzedBy={buzzAlert?.buzzedBy}
+          currentPlayerId={currentPlayerId}
           onDismiss={onDismissBuzz}
+          onUndoBuzz={onUndoBuzz}
           showDismissButton={isClueGiver}
         />
+
+        {/* Critical Timer Vignette - creates dramatic edge darkening */}
+        <AnimatePresence>
+          {isCritical && game.currentTurn.status === 'active' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0.15, 0.25, 0.15] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, repeat: Infinity }}
+              className="fixed inset-0 pointer-events-none z-40"
+              style={{
+                background: 'radial-gradient(circle at center, transparent 30%, rgba(244, 63, 94, 0.2) 100%)',
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Turn Result */}
         <AnimatePresence>
@@ -768,9 +982,9 @@ function GameView({
             variants={scaleIn}
             initial="hidden"
             animate="visible"
-            className="bg-white dark:bg-slate-800 rounded-xl p-8 text-center"
+            className="bg-white/90 backdrop-blur-sm rounded-xl p-8 text-center shadow-lg"
           >
-            <p className="text-lg mb-4 text-slate-600 dark:text-slate-300">
+            <p className="text-lg mb-4 text-slate-600">
               You&apos;re the clue giver!
             </p>
             <motion.div
@@ -789,13 +1003,13 @@ function GameView({
             variants={fadeIn}
             initial="hidden"
             animate="visible"
-            className="bg-white dark:bg-slate-800 rounded-xl p-8 text-center"
+            className="bg-white/90 backdrop-blur-sm rounded-xl p-8 text-center shadow-lg"
           >
             <motion.div
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              <p className="text-lg text-slate-600 dark:text-slate-300">
+              <p className="text-lg text-slate-600">
                 Waiting for {clueGiver?.name} to start their turn...
               </p>
             </motion.div>
@@ -823,32 +1037,75 @@ function GameView({
                 variants={fadeIn}
                 initial="hidden"
                 animate="visible"
-                className="bg-white dark:bg-slate-800 rounded-xl p-8 text-center"
+                className="rounded-xl p-8 text-center overflow-hidden relative"
+                style={{
+                  backgroundColor: playerTeamColor.secondary,
+                  border: `3px solid ${playerTeamColor.primary}`,
+                }}
               >
+                {/* Team badge */}
+                <div
+                  className="absolute top-0 left-0 right-0 py-2 text-white text-sm font-medium"
+                  style={{ backgroundColor: playerTeamColor.primary }}
+                >
+                  {playerTeamColor.name}
+                </div>
+
                 <motion.p
-                  className="text-2xl mb-4"
+                  className="text-3xl font-bold mt-8 mb-4"
+                  style={{ color: playerTeamColor.primary }}
                   animate={{ scale: [1, 1.02, 1] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
                   Your turn to guess!
                 </motion.p>
-                <p className="text-slate-500">
+
+                <p className="text-slate-600 dark:text-slate-400">
                   Listen to {clueGiver?.name}&apos;s clues
                 </p>
+
+                {/* Visual timer indicator */}
+                <div className="mt-6">
+                  <span className={`text-2xl font-mono font-bold ${timerClass}`}>
+                    {formatTime(timeLeft)}
+                  </span>
+                </div>
               </motion.div>
             )}
 
             {/* Opponent View */}
             {isOpponent && currentCard && (
-              <AnimatedCard cardKey={currentCard.targetWord}>
-                <OpponentCard card={currentCard} onBuzz={onBuzz} />
-              </AnimatedCard>
+              <div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-center mb-4 py-2 px-4 rounded-lg bg-amber-100 text-amber-700 border border-amber-300"
+                >
+                  You&apos;re watching {game.currentTurn.activeTeam === 'A' ? TEAM_COLORS.A.name : TEAM_COLORS.B.name} - Buzz if they break a rule!
+                </motion.div>
+                <AnimatedCard cardKey={currentCard.targetWord}>
+                  <OpponentCard card={currentCard} onBuzz={onBuzz} />
+                </AnimatedCard>
+              </div>
             )}
           </>
         )}
       </div>
+
+      {/* End Game Button (Host Only) */}
+      {isHost && (
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={onEndGame}
+          className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg shadow-lg transition-colors"
+        >
+          End Game
+        </motion.button>
+      )}
+
       <SoundToggle sounds={sounds} />
-    </main>
+    </motion.main>
   );
 }
 
@@ -866,24 +1123,24 @@ function ClueGiverCard({ card, onCorrect, onSkip, disabled }: ClueGiverCardProps
   const [handleSkip, isSkipDisabled] = useDebounceAction(onSkip);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-lg">
-      {/* Target Word */}
+    <div className="bg-white/95 backdrop-blur-sm rounded-2xl overflow-hidden shadow-xl">
+      {/* Target Word - Pastel gradient */}
       <motion.div
         initial={{ backgroundPosition: '0% 50%' }}
         animate={{ backgroundPosition: '100% 50%' }}
         transition={{ duration: 3, repeat: Infinity, repeatType: 'reverse' }}
         className="p-6 text-center"
         style={{
-          background: 'linear-gradient(135deg, #3B82F6, #8B5CF6, #3B82F6)',
-          backgroundSize: '200% 200%',
+          background: 'linear-gradient(135deg, #c4b5fd, #f0abfc, #93c5fd, #c4b5fd)',
+          backgroundSize: '300% 300%',
         }}
       >
-        <p className="text-3xl font-bold text-white">{card.targetWord}</p>
+        <p className="text-3xl font-bold text-white drop-shadow-sm">{card.targetWord}</p>
       </motion.div>
 
-      {/* Taboo Words */}
-      <div className="p-4 bg-red-50 dark:bg-red-900/20">
-        <p className="text-xs text-red-500 font-medium uppercase mb-2 text-center">
+      {/* Taboo Words - Soft rose */}
+      <div className="p-4 bg-rose-50 border-t border-rose-100">
+        <p className="text-xs text-rose-400 font-medium uppercase mb-2 text-center">
           Don&apos;t Say:
         </p>
         <div className="space-y-1">
@@ -893,7 +1150,7 @@ function ClueGiverCard({ card, onCorrect, onSkip, disabled }: ClueGiverCardProps
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="text-center text-lg font-medium text-red-600 dark:text-red-400"
+              className="text-center text-lg font-medium text-rose-500"
             >
               {word}
             </motion.p>
@@ -937,15 +1194,20 @@ function OpponentCard({ card, onBuzz }: OpponentCardProps) {
   const [handleBuzz, isBuzzDisabled] = useDebounceAction(onBuzz);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-lg">
-      {/* Target Word */}
-      <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-6 text-center">
-        <p className="text-3xl font-bold text-white">{card.targetWord}</p>
+    <div className="bg-white/95 backdrop-blur-sm rounded-2xl overflow-hidden shadow-xl">
+      {/* Target Word - Pastel gradient */}
+      <div
+        className="p-6 text-center"
+        style={{
+          background: 'linear-gradient(135deg, #c4b5fd, #f0abfc, #93c5fd)',
+        }}
+      >
+        <p className="text-3xl font-bold text-white drop-shadow-sm">{card.targetWord}</p>
       </div>
 
-      {/* Taboo Words */}
-      <div className="p-4 bg-red-50 dark:bg-red-900/20">
-        <p className="text-xs text-red-500 font-medium uppercase mb-2 text-center">
+      {/* Taboo Words - Soft rose */}
+      <div className="p-4 bg-rose-50 border-t border-rose-100">
+        <p className="text-xs text-rose-400 font-medium uppercase mb-2 text-center">
           Taboo Words:
         </p>
         <div className="space-y-1">
@@ -955,7 +1217,7 @@ function OpponentCard({ card, onBuzz }: OpponentCardProps) {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="text-center text-lg font-medium text-red-600 dark:text-red-400"
+              className="text-center text-lg font-medium text-rose-500"
             >
               {word}
             </motion.p>
@@ -963,14 +1225,17 @@ function OpponentCard({ card, onBuzz }: OpponentCardProps) {
         </div>
       </div>
 
-      {/* Buzz Button */}
+      {/* Buzz Button - Pastel coral */}
       <div className="p-4">
         <motion.button
           onClick={handleBuzz}
           disabled={isBuzzDisabled}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.95 }}
-          className="w-full py-6 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-bold text-2xl rounded-xl transition-colors shadow-lg"
+          className="w-full py-6 text-white font-bold text-2xl rounded-xl transition-colors shadow-lg disabled:opacity-50"
+          style={{
+            backgroundColor: '#fb7185', // rose-400 - matches BuzzOverlay
+          }}
         >
           BUZZ!
         </motion.button>
@@ -1054,14 +1319,8 @@ function GameOverView({
     winnerColor = TEAM_COLORS.B.primary;
   }
 
-  // Get winning team members for avatar display
-  const winningTeamIds = winner === 'tie' ? [] : room.teams[winner];
-  const winningPlayers = winningTeamIds
-    .map((id) => room.players[id])
-    .filter(Boolean);
-
   return (
-    <main className="min-h-screen bg-slate-100 dark:bg-slate-900 p-4 flex items-center justify-center">
+    <main className="min-h-screen bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50 p-4 flex items-center justify-center">
       <div className="flex flex-col items-center">
         {/* Screenshot target wrapper */}
         <motion.div
@@ -1069,7 +1328,7 @@ function GameOverView({
           variants={scaleIn}
           initial="hidden"
           animate="visible"
-          className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl p-8 text-center shadow-lg"
+          className="max-w-md w-full bg-white/90 backdrop-blur-sm rounded-xl p-8 text-center shadow-xl"
         >
           {/* Winner Text with bounce */}
           <motion.h1
@@ -1087,28 +1346,115 @@ function GameOverView({
             {winnerText}
           </motion.h1>
 
-          {/* Winning Team Avatars */}
-          {winningPlayers.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="flex justify-center gap-3 mb-6"
+          {/* Both Teams Display */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mb-6 space-y-4"
+          >
+            {/* Team A */}
+            <div
+              className={`p-3 rounded-lg ${
+                winner === 'A'
+                  ? 'bg-blue-50 ring-2 ring-blue-400 shadow-md shadow-blue-100'
+                  : 'bg-slate-50 opacity-75'
+              }`}
             >
-              {winningPlayers.map((player) => (
-                <motion.div
-                  key={player.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.5, type: 'spring' }}
-                  className="flex flex-col items-center gap-1"
-                >
-                  <PlayerAvatar playerId={player.id} size="lg" style={avatarStyle} />
-                  <span className="text-xs text-slate-500 max-w-[60px] truncate">
-                    {player.name}
-                  </span>
-                </motion.div>
-              ))}
+              <p
+                className="text-sm font-medium mb-2 text-center"
+                style={{ color: winner === 'A' ? TEAM_COLORS.A.primary : '#6B7280' }}
+              >
+                {TEAM_COLORS.A.name} {winner === 'A' && '🏆'}
+              </p>
+              <div className="flex justify-center gap-2 flex-wrap">
+                {room.teams.A.map((playerId) => {
+                  const player = room.players[playerId];
+                  if (!player) return null;
+                  return (
+                    <motion.div
+                      key={playerId}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.5, type: 'spring' }}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <PlayerAvatar playerId={playerId} size="md" style={avatarStyle} />
+                      <span className="text-xs text-slate-500 max-w-[50px] truncate">
+                        {player.name}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Team B */}
+            <div
+              className={`p-3 rounded-lg ${
+                winner === 'B'
+                  ? 'bg-rose-50 ring-2 ring-rose-400 shadow-md shadow-rose-100'
+                  : 'bg-slate-50 opacity-75'
+              }`}
+            >
+              <p
+                className="text-sm font-medium mb-2 text-center"
+                style={{ color: winner === 'B' ? TEAM_COLORS.B.primary : '#6B7280' }}
+              >
+                {TEAM_COLORS.B.name} {winner === 'B' && '🏆'}
+              </p>
+              <div className="flex justify-center gap-2 flex-wrap">
+                {room.teams.B.map((playerId) => {
+                  const player = room.players[playerId];
+                  if (!player) return null;
+                  return (
+                    <motion.div
+                      key={playerId}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.6, type: 'spring' }}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <PlayerAvatar playerId={playerId} size="md" style={avatarStyle} />
+                      <span className="text-xs text-slate-500 max-w-[50px] truncate">
+                        {player.name}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Game Stats */}
+          {gameOver.turnHistory && gameOver.turnHistory.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45 }}
+              className="bg-violet-50/80 rounded-lg p-4 mb-6"
+            >
+              <h3 className="text-sm font-medium text-violet-400 mb-3 text-center">Game Stats</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-slate-700">
+                    {gameOver.turnHistory.length}
+                  </p>
+                  <p className="text-xs text-slate-500">Turns Played</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-700">
+                    {gameOver.turnHistory.reduce((sum, t) => sum + t.cardsCorrect, 0)}
+                  </p>
+                  <p className="text-xs text-slate-500">Cards Guessed</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-700">
+                    {Math.max(...gameOver.turnHistory.map(t => t.cardsCorrect), 0)}
+                  </p>
+                  <p className="text-xs text-slate-500">Best Turn</p>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -1195,7 +1541,7 @@ function GameOverView({
             onClick={handleScreenshot}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 rounded-lg shadow-md text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md text-slate-600 hover:bg-white transition-colors"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -1269,18 +1615,18 @@ function JoinModal({ roomCode, onJoin, onCancel }: JoinModalProps) {
   const isValid = name.trim().length > 0;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 p-4">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-amber-50 to-sky-50 p-4">
       <motion.div
         variants={scaleIn}
         initial="hidden"
         animate="visible"
-        className="max-w-sm w-full bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg"
+        className="max-w-sm w-full bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-xl"
       >
         <div className="text-center mb-6">
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-2"
+            className="text-2xl font-bold text-slate-800 mb-2"
           >
             Join Game
           </motion.h1>
@@ -1290,8 +1636,8 @@ function JoinModal({ roomCode, onJoin, onCancel }: JoinModalProps) {
             transition={{ delay: 0.1 }}
             className="flex items-center justify-center gap-2"
           >
-            <span className="text-slate-500 dark:text-slate-400">Room:</span>
-            <span className="font-mono font-bold text-blue-500 tracking-widest">
+            <span className="text-slate-500">Room:</span>
+            <span className="font-mono font-bold text-violet-500 tracking-widest">
               {roomCode}
             </span>
           </motion.div>
@@ -1306,7 +1652,7 @@ function JoinModal({ roomCode, onJoin, onCancel }: JoinModalProps) {
           >
             <label
               htmlFor="playerName"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              className="block text-sm font-medium text-slate-700 mb-2"
             >
               Your Name
             </label>
@@ -1318,7 +1664,7 @@ function JoinModal({ roomCode, onJoin, onCancel }: JoinModalProps) {
               placeholder="Enter your name"
               maxLength={20}
               autoFocus
-              className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             />
           </motion.div>
 
@@ -1368,14 +1714,14 @@ function SoundToggle({ sounds }: SoundToggleProps) {
         sounds.playClick();
         sounds.toggleMuted();
       }}
-      className="fixed top-4 right-4 z-40 p-3 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 transition-colors"
+      className="fixed top-4 right-4 z-40 p-3 rounded-full bg-white/90 backdrop-blur-sm shadow-lg border border-slate-100 transition-colors"
       aria-label={sounds.isMuted ? 'Unmute sounds' : 'Mute sounds'}
       title={sounds.isMuted ? 'Unmute sounds' : 'Mute sounds'}
     >
       {sounds.isMuted ? (
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="h-5 w-5 text-slate-500"
+          className="h-5 w-5 text-slate-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -1395,7 +1741,7 @@ function SoundToggle({ sounds }: SoundToggleProps) {
       ) : (
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="h-5 w-5 text-slate-600 dark:text-slate-300"
+          className="h-5 w-5 text-violet-500"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

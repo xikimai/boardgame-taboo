@@ -25,20 +25,23 @@ export interface UseRoomState {
   error: string | null;
   buzzAlert: { buzzedBy: string; buzzerName: string } | null;
   turnResult: TurnResult | null;
-  gameOver: { winner: Team | 'tie'; finalScores: { A: number; B: number } } | null;
+  gameOver: { winner: Team | 'tie'; finalScores: { A: number; B: number }; turnHistory?: TurnResult[] } | null;
 }
 
 export interface UseRoomActions {
   joinRoom: (playerName: string) => void;
   selectTeam: (team: Team) => void;
   leaveTeam: () => void;
+  updateSettings: (settings: { maxRounds?: number; turnDuration?: number }) => void;
   startGame: () => void;
   startTurn: () => void;
   cardCorrect: () => void;
   cardSkip: () => void;
   buzz: () => void;
+  undoBuzz: () => void;
   dismissBuzz: () => void;
   restartGame: () => void;
+  endGame: () => void;
   clearBuzzAlert: () => void;
   clearTurnResult: () => void;
 }
@@ -200,6 +203,22 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
           });
           break;
 
+        case 'SETTINGS_UPDATED':
+          setState((prev) => {
+            if (!prev.room) return prev;
+            return {
+              ...prev,
+              room: {
+                ...prev.room,
+                settings: {
+                  ...prev.room.settings,
+                  ...message.payload,
+                },
+              },
+            };
+          });
+          break;
+
         case 'GAME_STARTED':
           setState((prev) => {
             // Track game start
@@ -283,6 +302,26 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
           }));
           break;
 
+        case 'BUZZ_UNDONE':
+          setState((prev) => ({
+            ...prev,
+            buzzAlert: null,
+            game: prev.game
+              ? {
+                  ...prev.game,
+                  currentTurn: {
+                    ...prev.game.currentTurn,
+                    status: 'active',
+                    timerStartedAt: message.payload.timerStartedAt,
+                    timerDuration: message.payload.timerDuration,
+                    timerPausedAt: 0,
+                    remainingTimeWhenPaused: 0,
+                  },
+                }
+              : null,
+          }));
+          break;
+
         case 'BUZZ_DISMISSED':
           setState((prev) => ({
             ...prev,
@@ -329,6 +368,7 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
             gameOver: {
               winner: message.payload.winner,
               finalScores: message.payload.finalScores,
+              turnHistory: message.payload.turnHistory,
             },
             room: prev.room ? { ...prev.room, status: 'finished' } : null,
           }));
@@ -438,6 +478,13 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
     sendMessage({ type: 'LEAVE_TEAM' });
   }, [sendMessage]);
 
+  const updateSettings = useCallback(
+    (settings: { maxRounds?: number; turnDuration?: number }) => {
+      sendMessage({ type: 'UPDATE_SETTINGS', payload: settings });
+    },
+    [sendMessage]
+  );
+
   const startGame = useCallback(() => {
     sendMessage({ type: 'START_GAME' });
   }, [sendMessage]);
@@ -458,12 +505,20 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
     sendMessage({ type: 'BUZZ' });
   }, [sendMessage]);
 
+  const undoBuzz = useCallback(() => {
+    sendMessage({ type: 'UNDO_BUZZ' });
+  }, [sendMessage]);
+
   const dismissBuzz = useCallback(() => {
     sendMessage({ type: 'DISMISS_BUZZ' });
   }, [sendMessage]);
 
   const restartGame = useCallback(() => {
     sendMessage({ type: 'RESTART_GAME' });
+  }, [sendMessage]);
+
+  const endGame = useCallback(() => {
+    sendMessage({ type: 'END_GAME' });
   }, [sendMessage]);
 
   const clearBuzzAlert = useCallback(() => {
@@ -486,13 +541,16 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
     joinRoom,
     selectTeam,
     leaveTeam,
+    updateSettings,
     startGame,
     startTurn,
     cardCorrect,
     cardSkip,
     buzz,
+    undoBuzz,
     dismissBuzz,
     restartGame,
+    endGame,
     clearBuzzAlert,
     clearTurnResult,
   };
