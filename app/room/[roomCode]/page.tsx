@@ -7,7 +7,7 @@ import { useRoom } from '@/lib/hooks/useRoom';
 import { useTimer, formatTime } from '@/lib/hooks/useTimer';
 import { useDebounceAction } from '@/lib/hooks/useDebounce';
 import { useSounds, type UseSoundsReturn } from '@/lib/sounds';
-import { TEAM_COLORS } from '@/lib/game';
+import { TEAM_COLORS, isValidRoomCode } from '@/lib/game';
 import { getStyleFromSeed, type DiceBearStyle } from '@/lib/avatars';
 import {
   fadeIn,
@@ -27,7 +27,10 @@ import type { Team } from '@/types';
 export default function RoomPage() {
   const params = useParams();
   const router = useRouter();
-  const roomCode = params.roomCode as string;
+
+  // Safely extract roomCode - handle undefined during SSR/hydration
+  const roomCodeParam = params?.roomCode;
+  const roomCode = typeof roomCodeParam === 'string' ? roomCodeParam : '';
 
   const [hasJoined, setHasJoined] = useState(false);
   const [needsName, setNeedsName] = useState(false);
@@ -82,6 +85,18 @@ export default function RoomPage() {
       return () => clearTimeout(timer);
     }
   }, [turnResult, clearTurnResult]);
+
+  // Early return while roomCode is loading/invalid (during SSR/hydration)
+  if (!roomCode || !isValidRoomCode(roomCode)) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900">
+        <div className="text-center">
+          <div className="rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4 animate-spin" />
+          <p className="text-slate-600 dark:text-slate-400">Loading room...</p>
+        </div>
+      </main>
+    );
+  }
 
   // Loading state with animation
   if (connectionStatus === 'connecting' || !room) {

@@ -12,6 +12,7 @@ import type {
   Team,
 } from '@/types';
 import { analytics, identifyPlayer } from '@/lib/analytics/posthog';
+import { isValidRoomCode } from '@/lib/game';
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999';
 
@@ -362,6 +363,16 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
 
   // Initialize WebSocket connection
   useEffect(() => {
+    // Guard: Don't connect with invalid room codes (defense in depth)
+    if (!isValidRoomCode(roomCode)) {
+      setState((prev) => ({
+        ...prev,
+        connectionStatus: 'disconnected',
+        error: roomCode ? 'Invalid room code' : null,
+      }));
+      return;
+    }
+
     const connect = () => {
       const socket = new PartySocket({
         host: PARTYKIT_HOST,
