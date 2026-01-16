@@ -42,8 +42,8 @@ test.describe('Share Link Feature', () => {
   });
 
   test('guest joins via direct URL and sees name modal', async () => {
-    // Navigate directly to room URL (simulating shared link)
-    await guestPage.goto(`/room/${roomCode}`);
+    // Navigate directly to join URL (simulating shared link)
+    await guestPage.goto(`/join/${roomCode}`);
 
     // Should see join modal with name input
     await expect(guestPage.locator('text=Join Game')).toBeVisible();

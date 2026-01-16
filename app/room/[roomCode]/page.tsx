@@ -263,7 +263,7 @@ function LobbyView({
   };
 
   const shareLink = async () => {
-    const url = `${window.location.origin}/room/${roomCode}`;
+    const url = `${window.location.origin}/join/${roomCode}`;
 
     // Try native share API first (mobile-friendly)
     if (navigator.share) {

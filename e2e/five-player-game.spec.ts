@@ -41,10 +41,10 @@ test.describe('5-Player Game Flow', () => {
   });
 
   test('4 players join via shared link', async () => {
-    // Players 1-4 (Bob, Charlie, Diana, Eve) join via direct URL
+    // Players 1-4 (Bob, Charlie, Diana, Eve) join via join URL
     for (let i = 1; i < 5; i++) {
       const player = players[i];
-      await player.page.goto(`/room/${roomCode}`);
+      await player.page.goto(`/join/${roomCode}`);
 
       // Should see join modal
       await expect(player.page.locator('#playerName')).toBeVisible();
