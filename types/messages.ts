@@ -33,8 +33,8 @@ export type ServerMessage =
   | { type: 'TURN_STARTED'; payload: { turn: TurnState; card: TabooCard | null } }
   | { type: 'CARD_CHANGED'; payload: { card: TabooCard | null; turnScore: number } }
   | { type: 'TIMER_SYNC'; payload: { serverTime: number; deadline: number } }
-  | { type: 'BUZZER_PRESSED'; payload: { buzzedBy: string; buzzerName: string } }
-  | { type: 'BUZZ_DISMISSED' }
+  | { type: 'BUZZER_PRESSED'; payload: { buzzedBy: string; buzzerName: string; timerPausedAt: number; remainingTimeWhenPaused: number } }
+  | { type: 'BUZZ_DISMISSED'; payload?: { timerStartedAt: number; timerDuration: number; autoDismissed?: boolean } }
   | { type: 'SCORE_UPDATED'; payload: { scores: { A: number; B: number }; turnScore: number } }
   | { type: 'TURN_ENDED'; payload: { result: TurnResult; nextTurn: TurnState | null } }
   | { type: 'GAME_OVER'; payload: { winner: Team | 'tie'; finalScores: { A: number; B: number }; reason?: 'completed' | 'team_forfeit' } }

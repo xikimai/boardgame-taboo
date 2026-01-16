@@ -19,11 +19,13 @@ const cards: TabooCard[] = cardsData.cards;
 // Cleanup constants
 const RECONNECT_GRACE_PERIOD_MS = 30_000; // 30 seconds before removing disconnected players
 const CLEANUP_CHECK_INTERVAL_MS = 10_000; // Check for cleanups every 10 seconds
+const BUZZ_TIMEOUT_MS = 10_000; // 10 seconds for clue giver to acknowledge buzz
 
 // Alarm intent types for multiplexing (PartyKit only allows ONE alarm per room)
 type AlarmIntent =
   | { type: 'turn_end'; scheduledFor: number }
-  | { type: 'player_cleanup'; scheduledFor: number };
+  | { type: 'player_cleanup'; scheduledFor: number }
+  | { type: 'buzz_timeout'; scheduledFor: number };
 
 // Helper to shuffle array
 function shuffleArray<T>(array: T[]): T[] {
@@ -188,6 +190,9 @@ export default class TabooServer implements Party.Server {
           break;
         case 'player_cleanup':
           this.processPlayerCleanup();
+          break;
+        case 'buzz_timeout':
+          await this.handleBuzzTimeout();
           break;
       }
     }
@@ -441,7 +446,7 @@ export default class TabooServer implements Party.Server {
     this.sendCardToPlayers();
   }
 
-  private handleBuzz(conn: Party.Connection) {
+  private async handleBuzz(conn: Party.Connection) {
     const playerId = this.getPlayerId(conn);
     if (!playerId || !this.game) return;
 
@@ -457,17 +462,40 @@ export default class TabooServer implements Party.Server {
       return;
     }
 
-    // Set buzzing state
+    const now = Date.now();
+    const { timerStartedAt, timerDuration } = this.game.currentTurn;
+
+    // Calculate remaining time
+    const elapsed = now - timerStartedAt;
+    const remainingTime = Math.max(0, timerDuration - elapsed);
+
+    // Pause timer: store when paused and remaining time
+    this.game.currentTurn.timerPausedAt = now;
+    this.game.currentTurn.remainingTimeWhenPaused = remainingTime;
     this.game.currentTurn.status = 'buzzing';
 
-    // Broadcast buzz
+    // Cancel turn_end alarm (timer is paused)
+    this.cancelAlarmIntent('turn_end');
+
+    // Schedule buzz_timeout alarm (10 seconds for clue giver to acknowledge)
+    await this.scheduleAlarm({
+      type: 'buzz_timeout',
+      scheduledFor: now + BUZZ_TIMEOUT_MS,
+    });
+
+    // Broadcast buzz with timer pause info
     this.broadcast({
       type: 'BUZZER_PRESSED',
-      payload: { buzzedBy: playerId, buzzerName: player.name },
+      payload: {
+        buzzedBy: playerId,
+        buzzerName: player.name,
+        timerPausedAt: now,
+        remainingTimeWhenPaused: remainingTime,
+      },
     });
   }
 
-  private handleDismissBuzz(conn: Party.Connection) {
+  private async handleDismissBuzz(conn: Party.Connection) {
     const playerId = this.getPlayerId(conn);
     if (!playerId || !this.game) return;
 
@@ -487,14 +515,98 @@ export default class TabooServer implements Party.Server {
       this.game.scores[this.game.currentTurn.activeTeam] - 1
     );
 
-    // Resume turn
+    const now = Date.now();
+    const remainingTime = this.game.currentTurn.remainingTimeWhenPaused;
+
+    // Resume timer with remaining time
+    this.game.currentTurn.timerStartedAt = now;
+    this.game.currentTurn.timerDuration = remainingTime;
+    this.game.currentTurn.timerPausedAt = 0;
+    this.game.currentTurn.remainingTimeWhenPaused = 0;
     this.game.currentTurn.status = 'active';
+
+    // Cancel buzz_timeout alarm
+    this.cancelAlarmIntent('buzz_timeout');
+
+    // Schedule new turn_end alarm for remaining time
+    if (remainingTime > 0) {
+      await this.scheduleAlarm({
+        type: 'turn_end',
+        scheduledFor: now + remainingTime,
+      });
+    } else {
+      // No time remaining, end turn immediately
+      this.endTurn();
+      return;
+    }
 
     // Draw next card
     this.drawNextCard();
 
-    // Broadcast
-    this.broadcast({ type: 'BUZZ_DISMISSED' });
+    // Broadcast with new timer info
+    this.broadcast({
+      type: 'BUZZ_DISMISSED',
+      payload: {
+        timerStartedAt: now,
+        timerDuration: remainingTime,
+      },
+    });
+    this.broadcast({
+      type: 'SCORE_UPDATED',
+      payload: {
+        scores: this.game.scores,
+        turnScore: this.game.currentTurn.turnScore,
+      },
+    });
+    this.sendCardToPlayers();
+  }
+
+  // Auto-dismiss buzz after timeout if clue giver doesn't respond
+  private async handleBuzzTimeout() {
+    if (!this.game || this.game.currentTurn.status !== 'buzzing') {
+      return;
+    }
+
+    // Apply -1 penalty
+    this.game.scores[this.game.currentTurn.activeTeam] = Math.max(
+      0,
+      this.game.scores[this.game.currentTurn.activeTeam] - 1
+    );
+
+    const now = Date.now();
+    const remainingTime = this.game.currentTurn.remainingTimeWhenPaused;
+
+    // Resume timer with remaining time
+    this.game.currentTurn.timerStartedAt = now;
+    this.game.currentTurn.timerDuration = remainingTime;
+    this.game.currentTurn.timerPausedAt = 0;
+    this.game.currentTurn.remainingTimeWhenPaused = 0;
+    this.game.currentTurn.status = 'active';
+
+    // Schedule new turn_end alarm for remaining time
+    if (remainingTime > 0) {
+      await this.scheduleAlarm({
+        type: 'turn_end',
+        scheduledFor: now + remainingTime,
+      });
+    } else {
+      // No time remaining, end turn immediately
+      this.endTurn();
+      return;
+    }
+
+    // Draw next card
+    this.drawNextCard();
+
+    // Broadcast auto-dismiss with timer info
+    this.broadcast({
+      type: 'BUZZ_DISMISSED',
+      payload: {
+        timerStartedAt: now,
+        timerDuration: remainingTime,
+        autoDismissed: true,
+      },
+    });
     this.broadcast({
       type: 'SCORE_UPDATED',
       payload: {
@@ -561,6 +673,8 @@ export default class TabooServer implements Party.Server {
         timerDuration: this.room.settings.turnDuration * 1000,
         isPaused: false,
         status: 'waiting',
+        timerPausedAt: 0,
+        remainingTimeWhenPaused: 0,
       },
       scores: { A: 0, B: 0 },
       // Track rotation index per team (starting team begins at 0, other at 0)
@@ -609,6 +723,12 @@ export default class TabooServer implements Party.Server {
 
   private endTurn() {
     if (!this.game) return;
+
+    // Guard: don't end turn while buzzing - wait for buzz to be dismissed
+    if (this.game.currentTurn.status === 'buzzing') {
+      console.warn('endTurn called while buzzing - ignoring');
+      return;
+    }
 
     // Clear turn timer (both alarm-based and legacy setTimeout)
     this.cancelAlarmIntent('turn_end');
@@ -672,6 +792,8 @@ export default class TabooServer implements Party.Server {
       timerDuration: this.room.settings.turnDuration * 1000,
       isPaused: false,
       status: 'waiting',
+      timerPausedAt: 0,
+      remainingTimeWhenPaused: 0,
     };
 
     this.game.currentTurn = nextTurn;

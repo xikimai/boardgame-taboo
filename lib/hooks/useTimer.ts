@@ -12,11 +12,17 @@ export interface UseTimerState {
 export function useTimer(
   startedAt: number,
   duration: number,
-  status: 'waiting' | 'active' | 'buzzing' | 'ended'
+  status: 'waiting' | 'active' | 'buzzing' | 'ended',
+  remainingTimeWhenPaused: number = 0
 ): UseTimerState {
   const [timeLeft, setTimeLeft] = useState<number>(Math.ceil(duration / 1000));
 
   const calculateTimeLeft = useCallback(() => {
+    // If buzzing with a paused time, show frozen remaining time
+    if (status === 'buzzing' && remainingTimeWhenPaused > 0) {
+      return Math.ceil(remainingTimeWhenPaused / 1000);
+    }
+
     if (status !== 'active' && status !== 'buzzing') {
       return Math.ceil(duration / 1000);
     }
@@ -28,14 +34,19 @@ export function useTimer(
     const elapsed = Date.now() - startedAt;
     const remaining = Math.max(0, duration - elapsed);
     return Math.ceil(remaining / 1000);
-  }, [startedAt, duration, status]);
+  }, [startedAt, duration, status, remainingTimeWhenPaused]);
 
   useEffect(() => {
     // Update immediately
     setTimeLeft(calculateTimeLeft());
 
+    // Don't run interval if buzzing (timer is frozen)
+    if (status === 'buzzing') {
+      return;
+    }
+
     // Only run interval if active
-    if (status !== 'active' && status !== 'buzzing') {
+    if (status !== 'active') {
       return;
     }
 

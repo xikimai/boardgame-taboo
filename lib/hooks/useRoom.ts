@@ -271,7 +271,12 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
             game: prev.game
               ? {
                   ...prev.game,
-                  currentTurn: { ...prev.game.currentTurn, status: 'buzzing' },
+                  currentTurn: {
+                    ...prev.game.currentTurn,
+                    status: 'buzzing',
+                    timerPausedAt: message.payload.timerPausedAt,
+                    remainingTimeWhenPaused: message.payload.remainingTimeWhenPaused,
+                  },
                 }
               : null,
           }));
@@ -284,7 +289,14 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
             game: prev.game
               ? {
                   ...prev.game,
-                  currentTurn: { ...prev.game.currentTurn, status: 'active' },
+                  currentTurn: {
+                    ...prev.game.currentTurn,
+                    status: 'active',
+                    timerStartedAt: message.payload?.timerStartedAt ?? prev.game.currentTurn.timerStartedAt,
+                    timerDuration: message.payload?.timerDuration ?? prev.game.currentTurn.timerDuration,
+                    timerPausedAt: 0,
+                    remainingTimeWhenPaused: 0,
+                  },
                 }
               : null,
           }));
@@ -294,6 +306,7 @@ export function useRoom(roomCode: string): UseRoomState & UseRoomActions {
           setState((prev) => ({
             ...prev,
             turnResult: message.payload.result,
+            buzzAlert: null, // Safety cleanup
             game: prev.game
               ? {
                   ...prev.game,

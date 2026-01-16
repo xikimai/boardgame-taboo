@@ -36,6 +36,8 @@ export interface TurnState {
   timerDuration: number; // Duration in milliseconds
   isPaused: boolean;
   status: TurnStatus;
+  timerPausedAt: number; // 0 if not paused, timestamp if paused during buzz
+  remainingTimeWhenPaused: number; // ms remaining when paused
 }
 
 export type TurnStatus = 'waiting' | 'active' | 'buzzing' | 'ended';
