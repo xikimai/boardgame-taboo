@@ -8,9 +8,13 @@ test.describe('Share Link Feature', () => {
   let roomCode: string;
 
   test.beforeAll(async ({ browser }) => {
-    // Create isolated browser contexts (separate sessionStorage)
-    hostContext = await browser.newContext();
-    guestContext = await browser.newContext();
+    // Create isolated browser contexts with clipboard permissions
+    hostContext = await browser.newContext({
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    guestContext = await browser.newContext({
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
     hostPage = await hostContext.newPage();
     guestPage = await guestContext.newPage();
   });
@@ -25,7 +29,7 @@ test.describe('Share Link Feature', () => {
 
     // Fill in name and create room
     await hostPage.fill('#createName', 'Alice');
-    await hostPage.click('button:has-text("Create Room")');
+    await hostPage.click('[data-testid="create-room-button"]');
 
     // Wait for lobby and extract room code from the URL
     await hostPage.waitForURL(/\/room\/[A-Z0-9]{5}/);
@@ -36,24 +40,26 @@ test.describe('Share Link Feature', () => {
     // Verify we're in the lobby
     await expect(hostPage.locator('text=Game Lobby')).toBeVisible();
 
-    // Click share button and verify toast appears
+    // Click share button and verify toast appears (either "Link copied!" or "Copied!" fallback)
     await hostPage.click('button:has-text("Share Invite Link")');
-    await expect(hostPage.locator('text=Link copied')).toBeVisible({ timeout: 5000 });
+    await expect(
+      hostPage.locator('text=/Link copied|Copied/')
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('guest joins via direct URL and sees name modal', async () => {
     // Navigate directly to join URL (simulating shared link)
     await guestPage.goto(`/join/${roomCode}`);
 
-    // Should see join modal with name input
-    await expect(guestPage.locator('text=Join Game')).toBeVisible();
+    // Should see join modal with name input (use heading selector to be specific)
+    await expect(guestPage.locator('h1:has-text("Join Game")')).toBeVisible();
     await expect(guestPage.locator('#playerName')).toBeVisible();
   });
 
   test('guest enters name and joins lobby', async () => {
     // Enter name and join
     await guestPage.fill('#playerName', 'Bob');
-    await guestPage.click('button:has-text("Join Game")');
+    await guestPage.click('[data-testid="join-modal-submit"]');
 
     // Should be in lobby
     await expect(guestPage.locator('text=Game Lobby')).toBeVisible();

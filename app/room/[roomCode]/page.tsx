@@ -1664,6 +1664,7 @@ function JoinModal({ roomCode, onJoin, onCancel }: JoinModalProps) {
               variant="primary"
               size="lg"
               fullWidth
+              data-testid="join-modal-submit"
             >
               {isSubmitting ? 'Joining...' : 'Join Game'}
             </AnimatedButton>

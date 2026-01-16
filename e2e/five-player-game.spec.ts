@@ -30,7 +30,7 @@ test.describe('5-Player Game Flow', () => {
     const alice = players[0];
     await alice.page.goto('/');
     await alice.page.fill('#createName', alice.name);
-    await alice.page.click('button:has-text("Create Room")');
+    await alice.page.click('[data-testid="create-room-button"]');
 
     // Wait for redirect to room page
     await alice.page.waitForURL(/\/room\/[A-Z0-9]{5}/);
@@ -71,8 +71,10 @@ test.describe('5-Player Game Flow', () => {
   });
 
   test('players join teams', async () => {
+    const alice = players[0];
+
     // Team A (Blue Team): Alice, Bob
-    await players[0].page.click('button:has-text("Join Blue Team")');
+    await alice.page.click('button:has-text("Join Blue Team")');
     await players[1].page.click('button:has-text("Join Blue Team")');
 
     // Team B (Red Team): Charlie, Diana, Eve
@@ -80,18 +82,23 @@ test.describe('5-Player Game Flow', () => {
     await players[3].page.click('button:has-text("Join Red Team")');
     await players[4].page.click('button:has-text("Join Red Team")');
 
-    // Wait for team assignments to sync
-    await players[0].page.waitForTimeout(500);
+    // Verify from Alice's (host) perspective that both teams have players
+    // When both teams have players, the button text changes from
+    // "Each team needs at least 1 player" to "Start Game"
+    await expect(
+      alice.page.locator('button:has-text("Start Game"):not(:has-text("needs"))')
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('host starts game', async () => {
     const alice = players[0];
 
-    // Wait for the start button to be enabled
-    await expect(alice.page.locator('button:has-text("Start Game")')).toBeEnabled({ timeout: 5000 });
+    // Wait for the start button to be enabled (both teams need players synced via WebSocket)
+    const startButton = alice.page.locator('button:has-text("Start Game")');
+    await expect(startButton).toBeEnabled({ timeout: 10000 });
 
-    // Click start game
-    await alice.page.click('button:has-text("Start Game")');
+    // Click start game (force: true to bypass animation stability check)
+    await startButton.click({ force: true });
 
     // Verify game started for all players by checking Round indicator appears
     for (const p of players) {

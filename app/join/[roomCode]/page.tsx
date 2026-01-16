@@ -127,6 +127,7 @@ export default function JoinPage() {
               variant="primary"
               size="lg"
               fullWidth
+              data-testid="join-modal-submit"
             >
               {isSubmitting ? 'Joining...' : 'Join Game'}
             </AnimatedButton>

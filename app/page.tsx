@@ -132,6 +132,7 @@ export default function Home() {
                     size="lg"
                     fullWidth
                     isLoading={isLoading}
+                    data-testid="create-room-button"
                   >
                     Create Room
                   </AnimatedButton>
@@ -178,6 +179,7 @@ export default function Home() {
                     size="lg"
                     fullWidth
                     isLoading={isLoading}
+                    data-testid="join-room-button"
                   >
                     Join Room
                   </AnimatedButton>
