@@ -1,13 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
+  --team-blue: #3B82F6;
+  --team-blue-light: #DBEAFE;
+  --team-red: #EF4444;
+  --team-red-light: #FEE2E2;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-team-blue: var(--team-blue);
+  --color-team-blue-light: var(--team-blue-light);
+  --color-team-red: var(--team-red);
+  --color-team-red-light: var(--team-red-light);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -22,5 +36,59 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Card animations */
+@keyframes cardFlip {
+  0% { transform: rotateY(0deg); }
+  50% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+@keyframes buzz {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.animate-card-flip {
+  animation: cardFlip 0.3s ease-in-out;
+}
+
+.animate-pulse-fast {
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+.animate-buzz {
+  animation: buzz 0.2s ease-in-out;
+}
+
+/* Timer colors */
+.timer-normal {
+  color: var(--foreground);
+}
+
+.timer-warning {
+  color: var(--warning);
+}
+
+.timer-critical {
+  color: var(--danger);
+  animation: pulse 0.5s ease-in-out infinite;
 }
