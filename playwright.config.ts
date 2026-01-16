@@ -18,16 +18,18 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'yarn dev',
+      command: process.env.CI ? 'yarn start' : 'yarn dev',
       url: 'http://localhost:3000',
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
+      stdout: 'pipe',
     },
     {
       command: 'yarn dev:party',
       url: 'http://localhost:1999',
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
+      stdout: 'pipe',
     },
   ],
   projects: [
