@@ -364,7 +364,7 @@ export default class TabooServer implements Party.Server {
 
     if (payload.turnDuration !== undefined) {
       // Allow 30, 45, 60, or 90 seconds
-      if ([30, 45, 60, 90].includes(payload.turnDuration)) {
+      if ([10, 30, 45, 60, 90].includes(payload.turnDuration)) {
         this.room.settings.turnDuration = payload.turnDuration;
       }
     }

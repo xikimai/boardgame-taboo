@@ -6,7 +6,7 @@ interface Player {
   name: string;
 }
 
-test.describe('5-Player Game Flow', () => {
+test.describe.serial('5-Player Game Flow', () => {
   const players: Player[] = [];
   let roomCode: string;
 
@@ -90,6 +90,22 @@ test.describe('5-Player Game Flow', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test('host configures game settings', async () => {
+    const alice = players[0];
+
+    // Wait for Game Settings section to be visible (only shown to host)
+    await expect(alice.page.locator('text=Game Settings')).toBeVisible({ timeout: 10000 });
+
+    // Set 10-second turns and 4 rounds for fast test execution (~80 seconds total)
+    await alice.page.click('[data-testid="duration-10"]');
+    await alice.page.click('[data-testid="rounds-4"]');
+
+    // Verify settings are applied by checking buttons have the selected class
+    // The selected button has bg-violet-500 class
+    await expect(alice.page.locator('[data-testid="duration-10"]')).toHaveClass(/bg-violet-500/, { timeout: 5000 });
+    await expect(alice.page.locator('[data-testid="rounds-4"]')).toHaveClass(/bg-violet-500/, { timeout: 5000 });
+  });
+
   test('host starts game', async () => {
     const alice = players[0];
 
@@ -106,34 +122,83 @@ test.describe('5-Player Game Flow', () => {
     }
   });
 
-  test('complete one turn', async () => {
-    // Find the clue giver (the one who sees "Start Turn" button)
-    let clueGiver: Page | null = null;
+  // Play through game until completion
+  test('play through 4 rounds to game completion', async () => {
+    test.setTimeout(300000); // 5 minutes
 
-    for (const p of players) {
-      const startTurnButton = p.page.locator('button:has-text("Start Turn")');
-      if (await startTurnButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        clueGiver = p.page;
+    // Give WebSocket time to sync game state after game starts
+    await players[0].page.waitForTimeout(3000);
+
+    // Play turns until game ends (max 20 turns to prevent infinite loop)
+    for (let turn = 1; turn <= 20; turn++) {
+      // Check if game is over
+      await players[0].page.bringToFront();
+      const gameOver = await players[0].page.locator('text=/Wins!|Tie/').isVisible().catch(() => false);
+      if (gameOver) {
         break;
       }
-    }
 
-    // If we found a clue giver, proceed with the turn
-    if (clueGiver) {
-      // Start the turn
-      await clueGiver.click('button:has-text("Start Turn")');
+      // Find clue giver by parsing game state
+      await players[0].page.waitForTimeout(500);
+      const clueGiverText = await players[0].page.locator('p:has-text("is giving clues")').textContent({ timeout: 10000 }).catch(() => null);
 
-      // Wait for card to appear
-      await clueGiver.waitForTimeout(500);
-
-      // Click "Got It!" to score a point
-      const gotItButton = clueGiver.locator('button:has-text("Got It!")');
-      if (await gotItButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await gotItButton.click();
-
-        // Verify score increased
-        await expect(clueGiver.locator('text=Turn Score: 1')).toBeVisible({ timeout: 5000 });
+      if (!clueGiverText) {
+        // Game might be transitioning, wait and check for game over
+        await players[0].page.waitForTimeout(2000);
+        const gameOverCheck = await players[0].page.locator('text=/Wins!|Tie/').isVisible().catch(() => false);
+        if (gameOverCheck) {
+          break;
+        }
+        throw new Error(`Could not find clue giver text for turn ${turn}`);
       }
+
+      const clueGiverName = clueGiverText.replace(' is giving clues', '').trim();
+      const clueGiverPlayer = players.find(p => p.name === clueGiverName);
+
+      if (!clueGiverPlayer) {
+        throw new Error(`Unknown clue giver "${clueGiverName}" for turn ${turn}`);
+      }
+
+      // Switch to the clue giver's page and click Start Turn
+      await clueGiverPlayer.page.bringToFront();
+      await clueGiverPlayer.page.waitForTimeout(1000);
+      const clueGiver = clueGiverPlayer.page;
+
+      // Start the turn
+      const startBtn = clueGiver.getByRole('button', { name: 'Start Turn' });
+      await startBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await startBtn.click({ force: true });
+
+      // Verify turn started - "Got It!" button should appear
+      const gotItBtn = clueGiver.locator('button:has-text("Got It!")');
+      await gotItBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+      // Play some cards - score 1-2 points per turn
+      for (let card = 0; card < 2; card++) {
+        if (await gotItBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await gotItBtn.click({ force: true });
+          await clueGiver.waitForTimeout(300);
+        }
+      }
+
+      // Wait for turn to end (timer expires after 10s)
+      await players[0].page.waitForTimeout(12000);
     }
+
+    // Verify game over screen appears
+    await players[0].page.bringToFront();
+    await expect(players[0].page.locator('text=/Wins!|Tie/')).toBeVisible({ timeout: 15000 });
+  });
+
+  test('game over shows final scores and winner', async () => {
+    const alice = players[0];
+
+    // Verify game over screen elements
+    await expect(alice.page.locator('text=/Blue Team Wins|Red Team Wins|Tie/')).toBeVisible();
+    await expect(alice.page.locator('text=Turns Played')).toBeVisible();
+    await expect(alice.page.locator('text=Cards Guessed')).toBeVisible();
+
+    // Host should see "Play Again" button
+    await expect(alice.page.locator('button:has-text("Play Again")')).toBeVisible();
   });
 });

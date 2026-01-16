@@ -384,6 +384,7 @@ function LobbyView({
                   {[4, 6, 8, 10].map((n) => (
                     <button
                       key={n}
+                      data-testid={`rounds-${n}`}
                       onClick={() => onUpdateSettings({ maxRounds: n })}
                       className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                         room.settings.maxRounds === n
@@ -403,9 +404,10 @@ function LobbyView({
                   Turn Duration (seconds)
                 </label>
                 <div className="flex gap-2">
-                  {[30, 45, 60, 90].map((s) => (
+                  {[10, 30, 45, 60, 90].map((s) => (
                     <button
                       key={s}
+                      data-testid={`duration-${s}`}
                       onClick={() => onUpdateSettings({ turnDuration: s })}
                       className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                         room.settings.turnDuration === s
