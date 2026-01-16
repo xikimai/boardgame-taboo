@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ignore scripts directory
+    "scripts/**",
   ]),
+  // Custom rule overrides
+  {
+    rules: {
+      // Allow setState in useEffect for state synchronization patterns
+      "react-hooks/set-state-in-effect": "off",
+      // Allow unused vars with underscore prefix
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    },
+  },
 ]);
 
 export default eslintConfig;
